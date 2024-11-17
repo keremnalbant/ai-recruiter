@@ -1,0 +1,31 @@
+# Core dependencies
+pydantic
+
+langchain
+langchain-anthropic
+langchain-core
+langchain-community
+langgraph
+
+fastapi
+uvicorn[standard]
+langserve
+aiohttp
+sse_starlette
+
+# Database
+motor
+pymongo
+
+# Scraping and automation
+selenium
+webdriver-manager
+beautifulsoup4
+lxml
+
+# Utils
+python-dotenv
+loguru
+
+langchain
+langserve
