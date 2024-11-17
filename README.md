@@ -6,6 +6,13 @@
 
 An intelligent recruitment system that leverages AI to match developers with job requirements by analyzing GitHub profiles and LinkedIn data.
 
+## Important Notes
+
+- This project is a work in progress and is not yet ready for production use.
+- The project is not yet fully functional and is missing many features.
+- The project is not yet fully tested and is missing many tests.
+- This project is mostly implemented with AI.
+
 ## 🚀 Features
 
 - Automated developer profile analysis
