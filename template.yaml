@@ -1,0 +1,176 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: GitHub LinkedIn Analyzer Serverless Application
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 1024
+    Runtime: python3.9
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        LOG_LEVEL: INFO
+        POWERTOOLS_SERVICE_NAME: github-linkedin-analyzer
+        POWERTOOLS_METRICS_NAMESPACE: GitHubLinkedInAnalyzer
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+
+Resources:
+  # DynamoDB Tables
+  StateTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${AWS::StackName}-state-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: session_id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: session_id
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  CacheTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${AWS::StackName}-cache-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: profile_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: profile_id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # Lambda Functions
+  APIFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/api
+      Handler: handler.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref StateTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CacheTable
+      Environment:
+        Variables:
+          STATE_TABLE: !Ref StateTable
+          CACHE_TABLE: !Ref CacheTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /recruit
+            Method: post
+
+  GitHubScraperFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/github_scraper
+      Handler: handler.handler
+      Timeout: 300
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref StateTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CacheTable
+      Environment:
+        Variables:
+          STATE_TABLE: !Ref StateTable
+          CACHE_TABLE: !Ref CacheTable
+
+  LinkedInScraperFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/linkedin_scraper
+      Handler: handler.handler
+      Timeout: 300
+      MemorySize: 2048
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref StateTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CacheTable
+      Environment:
+        Variables:
+          STATE_TABLE: !Ref StateTable
+          CACHE_TABLE: !Ref CacheTable
+
+  StateManagerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/state_manager
+      Handler: handler.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref StateTable
+      Environment:
+        Variables:
+          STATE_TABLE: !Ref StateTable
+
+  # API Gateway
+  ApiGatewayApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'*'"
+        AllowHeaders: "'*'"
+        AllowOrigin: "'*'"
+      Auth:
+        ApiKeyRequired: true
+      GatewayResponses:
+        DEFAULT_4XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+        DEFAULT_5XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+
+  # Parameter Store Parameters
+  GitHubTokenParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${Environment}/github-linkedin-analyzer/github-token
+      Type: SecureString
+      Value: dummy-value  # To be updated manually
+
+  AnthropicKeyParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${Environment}/github-linkedin-analyzer/anthropic-key
+      Type: SecureString
+      Value: dummy-value  # To be updated manually
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/
+
+  StateTableName:
+    Description: Name of the DynamoDB state table
+    Value: !Ref StateTable
+
+  CacheTableName:
+    Description: Name of the DynamoDB cache table
+    Value: !Ref CacheTable
