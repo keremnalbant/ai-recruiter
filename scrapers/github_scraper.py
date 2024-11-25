@@ -10,6 +10,14 @@ class GitHubScraper:
     def __init__(self):
         self.headers = {"Authorization": f"token {settings.GITHUB_TOKEN}"}
 
+    async def validate_repository(self, repo: str) -> bool:
+        """Check if a GitHub repository exists and is accessible."""
+        async with aiohttp.ClientSession(headers=self.headers) as session:
+            async with session.get(
+                f"https://api.github.com/repos/{repo}"
+            ) as response:
+                return response.status == 200
+
     async def get_contributors(
         self, repo: str, limit: int = 50
     ) -> List[GitHubContributor]:

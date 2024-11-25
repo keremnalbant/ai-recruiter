@@ -32,9 +32,49 @@ class CoordinatorAgent:
             task_description: Natural language description of the task
             limit: Maximum number of developers to find
         """
+        # Use LLM to extract repository info
+        repo_prompt = f"""Extract the GitHub repository name from this request: "{task_description}"
+        Rules:
+        - Return ONLY the repository path in "owner/repo" format, no other text
+        - Handle various input formats:
+          * Explicit paths: "owner/repo"
+          * Organization mentions: "openai repository" -> "openai/openai"
+          * Repository mentions: "openai's gpt-3 repo" -> "openai/gpt-3"
+          * URLs: "https://github.com/owner/repo" -> "owner/repo"
+        - If only organization is mentioned without specific repo:
+          * Use the organization name as both owner and repo
+          * Example: "openai" -> "openai/openai"
+        - If URL is provided, extract only owner/repo part
+        - Ignore irrelevant text about contributors, numbers, or other details
+        
+        Examples:
+        Input: "bring me last 50 contributors of openai github repository"
+        Output: openai/openai
+        
+        Input: "get contributors from openai/gpt-3"
+        Output: openai/gpt-3
+        
+        Input: "fetch contributors from https://github.com/microsoft/typescript"
+        Output: microsoft/typescript
+        
+        Input: "show me contributors of langchain's repository"
+        Output: langchain-ai/langchain
+        """
+        
+        repo_response = await self.llm.ainvoke(repo_prompt)
+        repo = repo_response.content.strip()
+        
+        # Validate repository format and existence
+        if "/" not in repo or len(repo.split("/")) != 2:
+            raise ValueError(f"Invalid repository format: {repo}. Expected format: owner/repo")
+
+        # Check if repository exists and is accessible
+        if not await self.github_scraper.validate_repository(repo):
+            raise ValueError(f"Repository {repo} not found or not accessible. Please check the repository name and your GitHub token.")
+
         # Get GitHub contributors
         github_profiles = await self.github_scraper.get_contributors(
-            "langchain-ai/langchain", limit=limit
+            repo, limit=limit
         )
 
         # Process profiles in parallel
