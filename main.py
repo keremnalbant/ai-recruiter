@@ -142,18 +142,79 @@ async def execute_workflow(request: RecruitmentRequest) -> JSONResponse:
         )
 
 # Add LangGraph Studio support
-@app.get("/graph")
+from agents.studio import create_studio_config
+
+studio_config = create_studio_config()
+
+@app.get("/studio/config")
+async def get_studio_config():
+    """Return the LangGraph Studio configuration."""
+    return JSONResponse(studio_config)
+
+@app.get("/studio/graph")
 async def get_graph():
     """Return the workflow graph structure for visualization."""
-    return JSONResponse(workflow_app.get_graph_json())
+    graph_json = workflow_app.get_graph_json()
+    
+    # Enhance graph with studio configurations
+    for node in graph_json["nodes"]:
+        node_config = studio_config["nodes"].get(node["id"], {})
+        node["description"] = node_config.get("description", "")
+        node["style"] = {"backgroundColor": node_config.get("color", "#757575")}
+    
+    return JSONResponse(graph_json)
 
-@app.get("/trace/{trace_id}")
+@app.get("/studio/trace/{trace_id}")
 async def get_trace(trace_id: str):
-    """Return a specific execution trace."""
+    """Return a specific execution trace with enhanced visualization."""
     trace = workflow_app.get_trace(trace_id)
     if not trace:
         raise HTTPException(status_code=404, detail="Trace not found")
+    
+    # Format messages in the trace
+    for step in trace["steps"]:
+        if "messages" in step:
+            formatted_messages = []
+            for msg in step["messages"]:
+                try:
+                    msg_type = getattr(msg, "type", "system")
+                    formatter = studio_config["message_formatters"].get(
+                        msg_type,
+                        studio_config["message_formatters"]["system"]
+                    )
+                    formatted_messages.append(formatter(msg))
+                except Exception as e:
+                    formatted_messages.append({
+                        "type": "system",
+                        "content": f"Error formatting message: {str(e)}",
+                        "style": {"color": "#000000", "background": "#FFCDD2"},
+                        "name": "error"
+                    })
+            step["messages"] = formatted_messages
+    
     return JSONResponse(trace)
+
+@app.get("/studio/tools")
+async def get_tools():
+    """Return available tools and their descriptions."""
+    return JSONResponse(studio_config["tools"])
+
+@app.get("/studio/traces")
+async def list_traces(limit: int = 10):
+    """List recent execution traces."""
+    traces = workflow_app.list_traces(limit)
+    return JSONResponse({
+        "total": len(traces),
+        "traces": [
+            {
+                "id": trace["id"],
+                "timestamp": trace["timestamp"],
+                "status": trace["status"],
+                "duration": trace["duration"]
+            }
+            for trace in traces
+        ]
+    })
 
 if __name__ == "__main__":
     import uvicorn

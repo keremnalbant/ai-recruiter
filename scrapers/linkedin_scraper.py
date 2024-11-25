@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
@@ -93,11 +93,18 @@ class LinkedInScraper:
             return LinkedInProfile(
                 profile_url=self.driver.current_url,
                 name=profile_name,
-                current_position=self._get_element_text(
-                    ".pv-top-card--list .text-body-medium"
-                ),
+                current_position=self._get_element_text(".pv-top-card--list .text-body-medium"),
                 company=self._get_element_text(".pv-top-card--experience-list-item"),
                 location=self._get_element_text(".pv-top-card--list .text-body-small"),
+                industry=self._get_element_text("[aria-label='Industry']"),
+                summary=self._get_element_text("#about"),
+                experience=[],
+                education=[],
+                skills=self._get_elements_text(".skills-section .skill-item"),
+                languages=self._get_elements_text(".languages-section .language-item"),
+                recommendations=[],
+                certifications=[],
+                volunteer=[]
             )
 
         except Exception as e:
@@ -107,9 +114,17 @@ class LinkedInScraper:
     def _get_element_text(self, selector: str) -> Optional[str]:
         try:
             element = self.driver.find_element(By.CSS_SELECTOR, selector)
-            return element.text.strip()
+            return element.text if element else None
         except NoSuchElementException:
             return None
+
+    def _get_elements_text(self, selector: str) -> List[str]:
+        """Get text from multiple elements matching selector."""
+        try:
+            elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+            return [el.text for el in elements if el and el.text]
+        except NoSuchElementException:
+            return []
 
     def __del__(self):
         if hasattr(self, "driver"):

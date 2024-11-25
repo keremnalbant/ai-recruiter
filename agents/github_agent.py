@@ -7,10 +7,20 @@ from scrapers.github_scraper import GitHubScraper
 from storage.models import GitHubContributor
 
 
+class GitHubMetrics(BaseModel):
+    total_commits: int = 0
+    total_prs: int = 0
+    total_issues: int = 0
+    recent_commits: int = 0
+    recent_prs: int = 0
+    recent_issues: int = 0
+    languages: Dict[str, int] = {}
+
 class GitHubRequest(BaseModel):
     repository_name: str
-    type: str = "contributors"  # can be "contributors", "maintainers", etc.
+    type: str = "contributors"  # can be "contributors", "maintainers", "active_contributors"
     limit: int = 50
+    include_metrics: bool = True
 
 
 class GitHubAgent(BaseAgent):
@@ -37,6 +47,7 @@ class GitHubAgent(BaseAgent):
         # Extract social profiles and additional information
         enriched_profiles = []
         for profile in profiles:
+            # Basic profile information
             enriched_profile = {
                 "github_username": profile.username,
                 "github_url": f"https://github.com/{profile.username}",
@@ -45,6 +56,16 @@ class GitHubAgent(BaseAgent):
                 "contributions": profile.contributions,
                 "social_urls": await self._extract_social_urls(profile)
             }
+
+            # Add activity metrics if requested
+            if request.include_metrics:
+                try:
+                    metrics = await self.scraper.get_activity_metrics(
+                        request.repository_name, profile.username
+                    )
+                    enriched_profile["activity_metrics"] = GitHubMetrics(**metrics)
+                except Exception as e:
+                    enriched_profile["activity_metrics_error"] = str(e)
             enriched_profiles.append(enriched_profile)
 
         return {

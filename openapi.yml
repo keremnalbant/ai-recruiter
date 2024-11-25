@@ -1,0 +1,234 @@
+openapi: 3.0.3
+info:
+  title: GitHub & LinkedIn Profile Analyzer
+  description: |
+    An intelligent system that analyzes GitHub contributors and their LinkedIn profiles using AI agents.
+    Built with FastAPI, LangChain, and LangGraph Studio.
+  version: 1.0.0
+  contact:
+    email: support@example.com
+servers:
+  - url: http://localhost:8000
+    description: Development server
+paths:
+  /recruit:
+    post:
+      summary: Analyze GitHub contributors and their LinkedIn profiles
+      description: |
+        Takes a natural language request to find GitHub contributors and analyzes their profiles
+        including GitHub metrics and LinkedIn information.
+      operationId: recruitDevelopers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecruitmentRequest'
+      responses:
+        '200':
+          description: Successful analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecruitmentResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /studio/config:
+    get:
+      summary: Get LangGraph Studio configuration
+      description: Returns the configuration for LangGraph Studio visualization
+      responses:
+        '200':
+          description: Studio configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudioConfig'
+  /studio/graph:
+    get:
+      summary: Get workflow graph data
+      description: Returns the workflow graph structure for visualization
+      responses:
+        '200':
+          description: Graph data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphData'
+  /studio/trace/{trace_id}:
+    get:
+      summary: Get execution trace
+      description: Returns detailed execution trace information
+      parameters:
+        - name: trace_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Trace data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraceData'
+        '404':
+          description: Trace not found
+components:
+  schemas:
+    RecruitmentRequest:
+      type: object
+      properties:
+        task_description:
+          type: string
+          example: "bring me last 50 contributors of openai github repository"
+        limit:
+          type: integer
+          default: 50
+          minimum: 1
+          maximum: 100
+      required:
+        - task_description
+    RecruitmentResponse:
+      type: object
+      properties:
+        repository:
+          type: string
+        total_profiles:
+          type: integer
+        profiles_with_linkedin:
+          type: integer
+        profiles:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeveloperProfile'
+    DeveloperProfile:
+      type: object
+      properties:
+        github_info:
+          $ref: '#/components/schemas/GitHubInfo'
+        linkedin_info:
+          $ref: '#/components/schemas/LinkedInInfo'
+    GitHubInfo:
+      type: object
+      properties:
+        username:
+          type: string
+        url:
+          type: string
+        contributions:
+          type: integer
+        email:
+          type: string
+        activity_metrics:
+          $ref: '#/components/schemas/ActivityMetrics'
+    ActivityMetrics:
+      type: object
+      properties:
+        total_commits:
+          type: integer
+        total_prs:
+          type: integer
+        total_issues:
+          type: integer
+        recent_commits:
+          type: integer
+        recent_prs:
+          type: integer
+        recent_issues:
+          type: integer
+        languages:
+          type: object
+          additionalProperties:
+            type: integer
+    LinkedInInfo:
+      type: object
+      properties:
+        url:
+          type: string
+        current_position:
+          type: string
+        company:
+          type: string
+        location:
+          type: string
+        industry:
+          type: string
+        experience:
+          type: array
+          items:
+            type: object
+        education:
+          type: array
+          items:
+            type: object
+        skills:
+          type: array
+          items:
+            type: string
+        certifications:
+          type: array
+          items:
+            type: object
+    StudioConfig:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        version:
+          type: string
+        nodes:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/NodeConfig'
+    NodeConfig:
+      type: object
+      properties:
+        description:
+          type: string
+        color:
+          type: string
+    GraphData:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            type: object
+        edges:
+          type: array
+          items:
+            type: object
+    TraceData:
+      type: object
+      properties:
+        steps:
+          type: array
+          items:
+            type: object
+        status:
+          type: string
+        duration:
+          type: number
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+tags:
+  - name: recruitment
+    description: Recruitment analysis endpoints
+  - name: studio
+    description: LangGraph Studio integration endpoints

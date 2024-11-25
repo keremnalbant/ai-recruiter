@@ -31,6 +31,66 @@ An intelligent recruitment system that leverages AI to match developers with job
 
 ## 🛠️ Installation
 
+### Development Setup
+
+1. Clone with development dependencies:
+```bash
+git clone <repository-url>
+cd github-linkedin-analyzer
+pip install -r requirements-dev.txt
+```
+
+2. Set up pre-commit hooks:
+```bash
+pre-commit install
+```
+
+3. Install LangGraph Studio:
+```bash
+pip install "langgraph[studio]"
+```
+
+4. Run with Studio support:
+```bash
+uvicorn main:app --reload --port 8000
+```
+
+### Development Tools
+
+1. **Code Quality**:
+   ```bash
+   # Format code
+   black .
+   isort .
+   
+   # Type checking
+   mypy .
+   
+   # Linting
+   flake8
+   ```
+
+2. **Testing**:
+   ```bash
+   # Run tests
+   pytest
+   
+   # Run tests with coverage
+   pytest --cov=.
+   ```
+
+3. **API Documentation**:
+   ```bash
+   # Generate OpenAPI schema
+   python -m scripts.generate_openapi
+   ```
+
+4. **LangGraph Studio**:
+   - Visit `http://localhost:8000/docs` for Swagger UI
+   - Visit `http://localhost:8000/studio/graph` for workflow visualization
+   - Use trace IDs to inspect execution flow
+
+
 ### Using Docker
 
 1. Clone the repository:
@@ -82,6 +142,79 @@ Create a `.env` file in the root directory:
 
 ## 📚 API Documentation
 
+### OpenAPI Documentation
+The complete API documentation is available in OpenAPI/Swagger format:
+
+1. **Interactive Documentation**:
+   - Visit `/docs` for Swagger UI
+   - Visit `/redoc` for ReDoc UI
+
+2. **OpenAPI Specification**:
+   - Available at `openapi.yml` in the root directory
+   - Contains detailed schema definitions and endpoint specifications
+
+3. **Main Endpoints**:
+   - `POST /recruit`: Analyze GitHub contributors
+   - `GET /studio/*`: LangGraph Studio integration endpoints
+
+All endpoints support JSON request/response formats and include detailed error responses.
+
+## 🔮 LangGraph Studio Integration
+
+### Overview
+The application includes LangGraph Studio integration for workflow visualization and debugging. The workflow consists of three main agents:
+
+1. **Coordinator Agent**: Processes natural language input and coordinates other agents
+2. **GitHub Agent**: Handles GitHub repository analysis
+3. **LinkedIn Agent**: Manages LinkedIn profile extraction
+
+### Studio Endpoints
+
+#### GET /studio/config
+Get LangGraph Studio configuration and metadata.
+
+Response:
+```json
+{
+    "title": "GitHub & LinkedIn Profile Analyzer",
+    "description": "Analyze GitHub contributors and their LinkedIn profiles",
+    "version": "1.0.0",
+    "nodes": {
+        "coordinator_node": {
+            "description": "Processes user input and extracts repository information",
+            "color": "#4CAF50"
+        }
+    }
+}
+```
+
+#### GET /studio/graph
+Get workflow graph visualization data showing the relationship between agents.
+
+#### GET /studio/trace/{trace_id}
+Get detailed execution trace with formatted messages and agent interactions.
+
+#### GET /studio/tools
+Get available tools and their descriptions for each agent.
+
+#### GET /studio/traces
+List recent execution traces with their status and duration.
+
+### 🎯 Visualization
+To view the workflow visualization:
+
+1. Make a request to the `/recruit` endpoint
+2. Copy the trace ID from the response
+3. Visit `/studio/trace/{trace_id}` to view the execution flow
+4. Use `/studio/graph` to view the overall workflow structure
+
+### ⚙️ Configuration
+The workflow visualization is configured through:
+
+1. `langgraph.json` - Main configuration file
+2. `agents/studio.py` - Studio-specific configurations
+3. Environment variables in `.env`
+
 ### Endpoints
 
 #### POST /recruit
@@ -90,14 +223,51 @@ Searches for developers matching the given requirements.
 Request:
 ```json
     {
-        "task_description": "Looking for senior Python developers with FastAPI experience",
+        "task_description": "bring me last 50 contributors of openai github repository",
         "limit": 50
     }
 ```
 
 Response:
 ```json
-    {
+{
+    "repository": "openai/openai",
+    "total_profiles": 50,
+    "profiles_with_linkedin": 25,
+    "profiles": [
+        {
+            "github_info": {
+                "username": "string",
+                "url": "string",
+                "contributions": 0,
+                "email": "string",
+                "activity_metrics": {
+                    "total_commits": 100,
+                    "total_prs": 50,
+                    "total_issues": 20,
+                    "recent_commits": 30,
+                    "recent_prs": 10,
+                    "recent_issues": 5,
+                    "languages": {
+                        "Python": 50000,
+                        "TypeScript": 30000
+                    }
+                }
+            },
+            "linkedin_info": {
+                "url": "string",
+                "current_position": "string",
+                "company": "string",
+                "location": "string",
+                "industry": "string",
+                "experience": [],
+                "education": [],
+                "skills": [],
+                "certifications": []
+            }
+        }
+    ]
+}
         "developers": [
             {
                 "id": "dev_123",
@@ -118,6 +288,53 @@ Response:
 - ReDoc: http://localhost:8000/redoc
 
 ## 🧪 Development
+
+## 🔍 Troubleshooting
+
+### Common Issues
+
+1. **GitHub API Rate Limiting**
+   ```bash
+   Error: GitHub API error: 403
+   ```
+   - Check your GitHub token permissions
+   - Ensure you haven't exceeded API rate limits
+   - Use authenticated requests
+
+2. **LinkedIn Authentication**
+   ```bash
+   Error: Failed to login to LinkedIn
+   ```
+   - Verify LinkedIn credentials in .env
+   - Check if LinkedIn has blocked automated access
+   - Consider using a LinkedIn API token if available
+
+3. **LangGraph Studio Issues**
+   ```bash
+   Error: Trace not found
+   ```
+   - Ensure workflow execution completed successfully
+   - Check if trace ID is correct
+   - Verify MongoDB connection
+
+### Debug Mode
+
+Enable debug mode for more detailed logs:
+```bash
+# In .env
+DEBUG=true
+LOG_LEVEL=debug
+
+# Run with debug logging
+uvicorn main:app --reload --log-level debug
+```
+
+### Getting Help
+
+1. Check the [Issues](https://github.com/yourusername/github-linkedin-analyzer/issues) page
+2. Review the documentation above
+3. Contact support at support@example.com
+
 
 ### Running Tests
 

@@ -1,0 +1,33 @@
+{
+  "dependencies": [
+    "./agents",
+    "./scrapers",
+    "./storage"
+  ],
+  "graphs": {
+    "github_linkedin_analyzer": "./agents/workflow.py:create_workflow",
+    "maintainers": "./agents/workflow.py:create_workflow"
+  },
+  "env": ".env",
+  "config": {
+    "title": "GitHub & LinkedIn Profile Analyzer",
+    "description": "Analyze GitHub contributors and their LinkedIn profiles using LangChain agents",
+    "github_api_base": "https://api.github.com",
+    "default_model": "claude-3-sonnet",
+    "trace_enabled": true,
+    "studio": {
+      "port": 8000,
+      "host": "0.0.0.0",
+      "base_url": "/langserve"
+    }
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "tags": [
+      "github",
+      "linkedin",
+      "profile-analysis",
+      "recruitment"
+    ]
+  }
+}
