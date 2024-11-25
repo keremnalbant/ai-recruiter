@@ -1,0 +1,37 @@
+# AWS Lambda Powertools Core
+aws-lambda-powertools>=2.30.0
+aws-xray-sdk>=2.12.0
+
+# Async Support
+aiohttp>=3.9.0
+aiohttp-retry>=2.8.3
+
+# Logging Enhancements
+python-json-logger>=2.0.0
+structlog>=23.0.0
+
+# Metrics and Tracing
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-instrumentation>=0.41b0
+
+# Error Handling
+backoff>=2.2.0
+tenacity>=8.2.0
+
+# Type Support
+typing-extensions>=4.5.0
+types-python-dateutil>=2.8.19
+
+# AWS SDK
+boto3>=1.28.0
+botocore>=1.31.0
+aioboto3>=12.0.0
+
+# State Management
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Utils
+python-dateutil>=2.8.2
+pytz>=2023.3

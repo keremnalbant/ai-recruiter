@@ -1,0 +1,59 @@
+{
+    "Parameters": {
+        "Environment": "dev",
+        "AlarmEmail": "dev-alerts@example.com",
+        "SlackWebhookUrl": "https://hooks.slack.com/services/DEV_CHANNEL",
+        "AlertWebhookUrl": "https://api.opsgenie.com/v2/alerts/dev",
+        "MetricsConfiguration": {
+            "SamplingRate": 0.1,
+            "DetailedMetricsEnabled": true,
+            "RetentionDays": 7,
+            "Thresholds": {
+                "APIErrorRate": 10,
+                "APILatency": 5000,
+                "CacheHitRate": 40,
+                "MemoryUtilization": 90,
+                "ConcurrentExecutions": 100,
+                "ColdStarts": 20,
+                "StateProcessingLag": 90
+            },
+            "Alarms": {
+                "APIErrors": {
+                    "EvaluationPeriods": 2,
+                    "Period": 300,
+                    "Threshold": 5
+                },
+                "APILatency": {
+                    "EvaluationPeriods": 2,
+                    "Period": 300,
+                    "Threshold": 5000
+                },
+                "GitHubRateLimit": {
+                    "EvaluationPeriods": 1,
+                    "Period": 60,
+                    "Threshold": 100
+                },
+                "DynamoDBThrottling": {
+                    "EvaluationPeriods": 2,
+                    "Period": 300,
+                    "Threshold": 5
+                }
+            }
+        },
+        "Logging": {
+            "Level": "DEBUG",
+            "RetentionDays": 7,
+            "DetailedTracing": true
+        },
+        "Dashboard": {
+            "RefreshRate": 300,
+            "DefaultTimeRange": "3h"
+        }
+    },
+    "Tags": {
+        "Environment": "dev",
+        "Project": "github-linkedin-analyzer",
+        "Owner": "dev-team",
+        "CostCenter": "development"
+    }
+}

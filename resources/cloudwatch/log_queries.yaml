@@ -1,0 +1,138 @@
+# Monitoring and Troubleshooting Queries
+
+APIErrors:
+  name: "API Error Analysis"
+  description: "Analyze API errors by type and frequency"
+  query: |
+    filter @message like "ERROR"
+    | stats count(*) as errorCount,
+            count_distinct(requestId) as uniqueRequests
+    by errorType, @timestamp
+    | sort by errorCount desc
+
+RequestLatency:
+  name: "Request Latency Analysis"
+  description: "Analyze request latency patterns"
+  query: |
+    filter @message like "RequestDuration"
+    | stats 
+        avg(duration) as avgLatency,
+        max(duration) as maxLatency,
+        min(duration) as minLatency,
+        percentile(duration, 95) as p95Latency
+    by operation, @timestamp
+    | sort by avgLatency desc
+
+GitHubScraping:
+  name: "GitHub Scraping Analysis"
+  description: "Monitor GitHub scraping performance"
+  query: |
+    filter service = "github-scraper"
+    | stats
+        count(*) as totalRequests,
+        count(status="success") as successfulRequests,
+        count(status="error") as failedRequests
+    by repository
+    | eval successRate = (successfulRequests / totalRequests) * 100
+
+LinkedInScraping:
+  name: "LinkedIn Scraping Analysis"
+  description: "Monitor LinkedIn scraping status"
+  query: |
+    filter service = "linkedin-scraper"
+    | stats
+        count(*) as totalAttempts,
+        count(status="blocked") as blockedAttempts,
+        count(status="success") as successfulAttempts
+    by profileType
+    | eval blockRate = (blockedAttempts / totalAttempts) * 100
+
+StateTransitions:
+  name: "State Transition Analysis"
+  description: "Track workflow state transitions"
+  query: |
+    filter @message like "state_transition"
+    | stats
+        count(*) as transitionCount,
+        count_distinct(sessionId) as uniqueSessions
+    by fromState, toState, @timestamp
+    | sort by transitionCount desc
+
+ColdStarts:
+  name: "Lambda Cold Start Analysis"
+  description: "Analyze Lambda cold starts"
+  query: |
+    filter @message like "REPORT"
+    | parse @message /Init Duration: (?<initDuration>.*?) ms/
+    | stats
+        count(*) as coldStarts,
+        avg(initDuration) as avgInitDuration,
+        max(initDuration) as maxInitDuration
+    by functionName, @timestamp
+
+CacheEfficiency:
+  name: "Cache Hit Rate Analysis"
+  description: "Analyze cache efficiency"
+  query: |
+    filter @message like "cache"
+    | stats
+        count(*) as totalRequests,
+        count(result="hit") as cacheHits
+    by cacheType
+    | eval hitRate = (cacheHits / totalRequests) * 100
+
+RateLimiting:
+  name: "Rate Limit Monitoring"
+  description: "Track rate limit usage"
+  query: |
+    filter @message like "rate_limit"
+    | stats min(remaining) as minRemaining,
+            avg(remaining) as avgRemaining
+    by service, @timestamp
+    | sort by minRemaining asc
+
+ErrorPatterns:
+  name: "Error Pattern Analysis"
+  description: "Identify common error patterns"
+  query: |
+    filter level = "ERROR"
+    | parse @message "error: * stackTrace:" as errorMessage
+    | stats count(*) as errorCount
+    by errorMessage, service
+    | sort by errorCount desc
+    | limit 20
+
+PerformanceMetrics:
+  name: "Performance Metrics Analysis"
+  description: "Analyze system performance"
+  query: |
+    filter @message like "metrics"
+    | stats
+        avg(duration) as avgDuration,
+        max(duration) as maxDuration,
+        avg(memoryUsed) as avgMemory,
+        max(memoryUsed) as maxMemory
+    by service, operation
+    | sort by avgDuration desc
+
+SecurityEvents:
+  name: "Security Event Analysis"
+  description: "Monitor security-related events"
+  query: |
+    filter level in ["WARNING", "ERROR"]
+    and @message like /(unauthorized|forbidden|invalid token|security)/
+    | stats count(*) as eventCount
+    by eventType, sourceIp, @timestamp
+    | sort by eventCount desc
+
+DataQuality:
+  name: "Data Quality Monitoring"
+  description: "Track data quality metrics"
+  query: |
+    filter @message like "quality_check"
+    | stats
+        avg(completeness) as avgCompleteness,
+        avg(accuracy) as avgAccuracy,
+        count(*) as totalChecks
+    by dataType
+    | sort by avgCompleteness desc

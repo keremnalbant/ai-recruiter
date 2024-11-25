@@ -1,0 +1,632 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: GitHub LinkedIn Analyzer Serverless Application
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 1024
+    Runtime: python3.9
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        LOG_LEVEL: INFO
+        POWERTOOLS_SERVICE_NAME: github-linkedin-analyzer
+        POWERTOOLS_METRICS_NAMESPACE: GitHubLinkedInAnalyzer
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+
+Globals:
+  Function:
+    Runtime: python3.9
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        # Powertools Configuration
+        LOG_LEVEL: !Sub "${Environment}"
+        POWERTOOLS_SERVICE_NAME: github-linkedin-analyzer
+        POWERTOOLS_METRICS_NAMESPACE: GitHubLinkedInAnalyzer
+        POWERTOOLS_LOGGER_LOG_EVENT: true
+        POWERTOOLS_LOGGER_SAMPLE_RATE: !If [IsProd, "1.0", "0.1"]
+        POWERTOOLS_LOGGER_CORRELATION_ID_PATH: $context.requestId
+        
+        # Monitoring Configuration
+        ENABLE_DETAILED_METRICS: !If [IsProd, "true", "false"]
+        METRICS_BATCH_SIZE: !If [IsProd, "100", "10"]
+        ENABLE_XRAY_TRACING: true
+        ENABLE_STRUCTURED_LOGGING: true
+        
+        # Alerting Thresholds
+        ERROR_THRESHOLD: !If [IsProd, "3", "5"]
+        LATENCY_THRESHOLD: !If [IsProd, "2000", "5000"]
+        RATE_LIMIT_THRESHOLD: !If [IsProd, "500", "100"]
+        
+        # Performance Configuration
+        CACHE_TTL: !If [IsProd, "3600", "300"]
+        BATCH_SIZE: !If [IsProd, "50", "10"]
+        MAX_RETRIES: !If [IsProd, "3", "2"]
+        
+        # Debug Configuration
+        DEBUG_MODE: !If [IsProd, "false", "true"]
+        TRACE_MODE: !If [IsProd, "error", "debug"]
+    Layers:
+      - !Ref PowertoolsLayer
+      - !Ref CommonLayer
+
+Resources:
+  # Lambda Layers
+  PowertoolsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: powertools-layer
+      Description: AWS Lambda Powertools layer
+      ContentUri: layers/powertools-layer/
+      CompatibleRuntimes:
+        - python3.9
+      RetentionPolicy: Retain
+
+  CommonLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: common-layer
+      Description: Common utilities and dependencies
+      ContentUri: layers/common/python/
+      CompatibleRuntimes:
+        - python3.9
+      RetentionPolicy: Retain
+
+  # DynamoDB Tables
+  StateTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${AWS::StackName}-state-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: session_id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: session_id
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  CacheTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${AWS::StackName}-cache-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: profile_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: profile_id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # Lambda Functions
+  APIFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/api
+      Handler: handler.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref StateTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CacheTable
+      Environment:
+        Variables:
+          STATE_TABLE: !Ref StateTable
+          CACHE_TABLE: !Ref CacheTable
+      Tracing: Active
+      Tags:
+        Service: github-linkedin-analyzer
+        Environment: !Ref Environment
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /recruit
+            Method: post
+
+  GitHubScraperFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/github_scraper
+      Handler: handler.handler
+      Timeout: 300
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref StateTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CacheTable
+      Environment:
+        Variables:
+          STATE_TABLE: !Ref StateTable
+          CACHE_TABLE: !Ref CacheTable
+          POWERTOOLS_SERVICE_NAME: github-scraper
+          POWERTOOLS_METRICS_NAMESPACE: GitHubLinkedInAnalyzer
+          POWERTOOLS_LOGGER_LOG_EVENT: true
+          POWERTOOLS_LOGGER_SAMPLE_RATE: 0.1
+          POWERTOOLS_METRICS_NAMESPACE: GitHubScraper
+      Tracing: Active
+      AutoPublishAlias: live
+      DeploymentPreference:
+        Type: Canary10Percent5Minutes
+      Tags:
+        Service: github-scraper
+        Environment: !Ref Environment
+
+  # CloudWatch Dashboard
+  MonitoringDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub ${AWS::StackName}-dashboard
+      DashboardBody: !Sub 
+        - !Include resources/cloudwatch/dashboard.json
+        - APIFunction: !Ref APIFunction
+          GitHubScraperFunction: !Ref GitHubScraperFunction
+          LinkedInScraperFunction: !Ref LinkedInScraperFunction
+          StateManagerFunction: !Ref StateManagerFunction
+          StateTable: !Ref StateTable
+          CacheTable: !Ref CacheTable
+
+  # CloudWatch Alarms
+  APIErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Alert on high API error rate
+      MetricName: APIErrors
+      Namespace: GitHubLinkedInAnalyzer
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+      Dimensions:
+        - Name: Service
+          Value: github-linkedin-analyzer
+
+  APILatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Alert on high API latency
+      MetricName: RequestDuration
+      Namespace: GitHubLinkedInAnalyzer
+      ExtendedStatistic: p90
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5000  # 5 seconds
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+      Dimensions:
+        - Name: Service
+          Value: github-linkedin-analyzer
+
+  GitHubScraperErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Alert on GitHub scraper errors
+      MetricName: GitHubScrapingErrors
+      Namespace: GitHubLinkedInAnalyzer
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 3
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+      Dimensions:
+        - Name: Service
+          Value: github-scraper
+
+  LinkedInScraperErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Alert on LinkedIn scraper errors
+      MetricName: LinkedInScrapingErrors
+      Namespace: GitHubLinkedInAnalyzer
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 3
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+      Dimensions:
+        - Name: Service
+          Value: linkedin-scraper
+
+  DynamoDBThrottlingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Alert on DynamoDB throttling
+      MetricName: ThrottledRequests
+      Namespace: AWS/DynamoDB
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+      Dimensions:
+        - Name: TableName
+          Value: !Ref StateTable
+
+  ConcurrentExecutionsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Alert on high concurrent Lambda executions
+      MetricName: ConcurrentExecutions
+      Namespace: AWS/Lambda
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 80  # 80% of configured concurrency
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref APIFunction
+
+  # Composite Alarms
+  SystemHealthAlarm:
+    Type: AWS::CloudWatch::CompositeAlarm
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-system-health
+      AlarmDescription: Overall system health based on multiple metrics
+      AlarmRule: !Sub >-
+        ALARM(${APIErrorsAlarm}) OR
+        ALARM(${GitHubScraperErrorsAlarm}) OR
+        ALARM(${LinkedInScraperErrorsAlarm}) OR
+        ALARM(${DynamoDBThrottlingAlarm})
+      AlarmActions:
+        - !Ref AlertTopic
+      InsufficientDataActions:
+        - !Ref AlertTopic
+
+  PerformanceDegradationAlarm:
+    Type: AWS::CloudWatch::CompositeAlarm
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-performance-degradation
+      AlarmDescription: System performance degradation indicators
+      AlarmRule: !Sub >-
+        ALARM(${APILatencyAlarm}) OR
+        ALARM(${LowCacheHitRateAlarm}) OR
+        ALARM(${ConcurrentExecutionsAlarm})
+      AlarmActions:
+        - !Ref AlertTopic
+
+  LowCacheHitRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Alert on low cache hit rate
+      MetricName: CacheHitRate
+      Namespace: GitHubLinkedInAnalyzer
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 50  # Below 50% hit rate
+      ComparisonOperator: LessThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+      Dimensions:
+        - Name: Service
+          Value: github-linkedin-analyzer
+
+  MemoryUtilizationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Alert on high Lambda memory utilization
+      MetricName: MemoryUtilization
+      Namespace: GitHubLinkedInAnalyzer
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 85  # 85% of allocated memory
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+      Dimensions:
+        - Name: Service
+          Value: github-linkedin-analyzer
+
+  ColdStartAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Alert on excessive Lambda cold starts
+      MetricName: ColdStarts
+      Namespace: GitHubLinkedInAnalyzer
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10  # More than 10 cold starts in 5 minutes
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+      Dimensions:
+        - Name: Service
+          Value: github-linkedin-analyzer
+
+  StateManagerLagAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Alert on state processing delays
+      MetricName: StateProcessingLag
+      Namespace: GitHubLinkedInAnalyzer
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 60  # More than 60 seconds lag
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+      Dimensions:
+        - Name: Service
+          Value: state-manager
+
+  APIGatewayLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Alert on API Gateway latency
+      MetricName: Latency
+      Namespace: AWS/ApiGateway
+      Statistic: p95
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1000  # 1 second
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+      Dimensions:
+        - Name: ApiName
+          Value: !Ref ApiGatewayApi
+
+  # SNS Topics and Subscriptions
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub ${AWS::StackName}-alerts
+      KmsMasterKeyId: !Ref AlertTopicKey
+
+  AlertTopicKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for encrypting SNS messages
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: '*'
+          - Sid: Allow SNS to use the key
+            Effect: Allow
+            Principal:
+              Service: sns.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+            Resource: '*'
+
+  AlertTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref AlertTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudWatchAlarms
+            Effect: Allow
+            Principal:
+              Service: cloudwatch.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref AlertTopic
+
+  # Email Subscription
+  AlertEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Sub '${AlarmEmail}'
+
+  # Slack Notification Lambda
+  SlackNotificationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/slack_notifier
+      Handler: handler.handler
+      Runtime: python3.9
+      Environment:
+        Variables:
+          SLACK_WEBHOOK_URL: !Sub '${SlackWebhookUrl}'
+          POWERTOOLS_SERVICE_NAME: slack-notifier
+      Policies:
+        - KMSDecryptPolicy:
+            KeyId: !Ref AlertTopicKey
+      Events:
+        SNSNotification:
+          Type: SNS
+          Properties:
+            Topic: !Ref AlertTopic
+
+  # OpsGenie/PagerDuty Integration
+  AlertWebhook:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: https
+      Endpoint: !Sub '${AlertWebhookUrl}'
+
+Parameters:
+  AlarmEmail:
+    Type: String
+    Description: Email address for alarm notifications
+  
+  SlackWebhookUrl:
+    Type: String
+    Description: Slack webhook URL for notifications
+    NoEcho: true
+  
+  AlertWebhookUrl:
+    Type: String
+    Description: OpsGenie/PagerDuty webhook URL
+    NoEcho: true
+
+  LinkedInScraperFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/linkedin_scraper
+      Handler: handler.handler
+      Timeout: 300
+      MemorySize: 2048
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref StateTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CacheTable
+      Environment:
+        Variables:
+          STATE_TABLE: !Ref StateTable
+          CACHE_TABLE: !Ref CacheTable
+          POWERTOOLS_SERVICE_NAME: linkedin-scraper
+          POWERTOOLS_METRICS_NAMESPACE: GitHubLinkedInAnalyzer
+          POWERTOOLS_LOGGER_LOG_EVENT: true
+          POWERTOOLS_LOGGER_SAMPLE_RATE: 0.1
+          POWERTOOLS_METRICS_NAMESPACE: LinkedInScraper
+      Tracing: Active
+      AutoPublishAlias: live
+      DeploymentPreference:
+        Type: Canary10Percent5Minutes
+      Tags:
+        Service: linkedin-scraper
+        Environment: !Ref Environment
+
+  CachingPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Policy for DynamoDB caching operations
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+              - dynamodb:Query
+            Resource:
+              - !GetAtt CacheTable.Arn
+              - !Sub "${CacheTable.Arn}/index/*"
+
+  StateManagerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/state_manager
+      Handler: handler.handler
+      Timeout: 30
+      MemorySize: 512
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref StateTable
+        - !Ref CachingPolicy
+      Environment:
+        Variables:
+          STATE_TABLE: !Ref StateTable
+          POWERTOOLS_SERVICE_NAME: state-manager
+          POWERTOOLS_METRICS_NAMESPACE: GitHubLinkedInAnalyzer
+          POWERTOOLS_LOGGER_LOG_EVENT: true
+          POWERTOOLS_LOGGER_SAMPLE_RATE: 0.1
+          POWERTOOLS_METRICS_NAMESPACE: StateManager
+      Tracing: Active
+      AutoPublishAlias: live
+      Tags:
+        Service: state-manager
+        Environment: !Ref Environment
+
+  # Custom Metrics Filter
+  ErrorLogMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${StateManagerFunction}
+      FilterPattern: '[timestamp, requestId, level = ERROR, message]'
+      MetricTransformations:
+        - MetricValue: '1'
+          MetricNamespace: GitHubLinkedInAnalyzer
+          MetricName: StateManagerErrors
+          DefaultValue: 0
+
+  # API Gateway
+  ApiGatewayApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'*'"
+        AllowHeaders: "'*'"
+        AllowOrigin: "'*'"
+      Auth:
+        ApiKeyRequired: true
+      GatewayResponses:
+        DEFAULT_4XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+        DEFAULT_5XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+
+  # Parameter Store Parameters
+  GitHubTokenParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${Environment}/github-linkedin-analyzer/github-token
+      Type: SecureString
+      Value: dummy-value  # To be updated manually
+
+  AnthropicKeyParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${Environment}/github-linkedin-analyzer/anthropic-key
+      Type: SecureString
+      Value: dummy-value  # To be updated manually
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/
+
+  StateTableName:
+    Description: Name of the DynamoDB state table
+    Value: !Ref StateTable
+
+  CacheTableName:
+    Description: Name of the DynamoDB cache table
+    Value: !Ref CacheTable

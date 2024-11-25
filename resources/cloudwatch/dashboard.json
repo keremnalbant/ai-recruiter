@@ -1,0 +1,155 @@
+{
+    "widgets": [
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 6,
+            "properties": {
+                "view": "timeSeries",
+                "stacked": false,
+                "metrics": [
+                    [ "GitHubLinkedInAnalyzer", "APIRequests", "Service", "github-linkedin-analyzer" ],
+                    [ ".", "APIErrors", ".", "." ]
+                ],
+                "region": "${AWS::Region}",
+                "title": "API Requests and Errors",
+                "period": 300
+            }
+        },
+        {
+            "type": "metric",
+            "x": 12,
+            "y": 0,
+            "width": 12,
+            "height": 6,
+            "properties": {
+                "view": "timeSeries",
+                "stacked": false,
+                "metrics": [
+                    [ "GitHubLinkedInAnalyzer", "RequestDuration", "Service", "github-linkedin-analyzer", { "stat": "Average" } ],
+                    [ "...", "github-scraper", { "stat": "Average" } ],
+                    [ "...", "linkedin-scraper", { "stat": "Average" } ]
+                ],
+                "region": "${AWS::Region}",
+                "title": "Request Duration by Service",
+                "period": 300
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 6,
+            "width": 12,
+            "height": 6,
+            "properties": {
+                "view": "timeSeries",
+                "stacked": false,
+                "metrics": [
+                    [ "GitHubLinkedInAnalyzer", "ContributorsFetched", "Repository", "*" ],
+                    [ ".", "ContributorsProcessed", "Status", "success" ],
+                    [ "...", "error" ]
+                ],
+                "region": "${AWS::Region}",
+                "title": "GitHub Contributors Processing",
+                "period": 300
+            }
+        },
+        {
+            "type": "metric",
+            "x": 12,
+            "y": 6,
+            "width": 12,
+            "height": 6,
+            "properties": {
+                "view": "timeSeries",
+                "stacked": false,
+                "metrics": [
+                    [ "GitHubLinkedInAnalyzer", "LinkedInProfilesProcessed", "Status", "success" ],
+                    [ "...", "error" ]
+                ],
+                "region": "${AWS::Region}",
+                "title": "LinkedIn Profile Processing",
+                "period": 300
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 12,
+            "width": 8,
+            "height": 6,
+            "properties": {
+                "view": "singleValue",
+                "metrics": [
+                    [ "AWS/Lambda", "Errors", "FunctionName", "${APIFunction}", { "stat": "Sum" } ],
+                    [ "...", "${GitHubScraperFunction}", { "stat": "Sum" } ],
+                    [ "...", "${LinkedInScraperFunction}", { "stat": "Sum" } ],
+                    [ "...", "${StateManagerFunction}", { "stat": "Sum" } ]
+                ],
+                "region": "${AWS::Region}",
+                "title": "Lambda Errors (24h)",
+                "period": 86400
+            }
+        },
+        {
+            "type": "metric",
+            "x": 8,
+            "y": 12,
+            "width": 8,
+            "height": 6,
+            "properties": {
+                "view": "singleValue",
+                "metrics": [
+                    [ "AWS/Lambda", "Duration", "FunctionName", "${APIFunction}", { "stat": "Average" } ],
+                    [ "...", "${GitHubScraperFunction}", { "stat": "Average" } ],
+                    [ "...", "${LinkedInScraperFunction}", { "stat": "Average" } ],
+                    [ "...", "${StateManagerFunction}", { "stat": "Average" } ]
+                ],
+                "region": "${AWS::Region}",
+                "title": "Average Duration (ms)",
+                "period": 300
+            }
+        },
+        {
+            "type": "metric",
+            "x": 16,
+            "y": 12,
+            "width": 8,
+            "height": 6,
+            "properties": {
+                "view": "singleValue",
+                "metrics": [
+                    [ "AWS/Lambda", "ConcurrentExecutions", "FunctionName", "${APIFunction}", { "stat": "Maximum" } ],
+                    [ "...", "${GitHubScraperFunction}", { "stat": "Maximum" } ],
+                    [ "...", "${LinkedInScraperFunction}", { "stat": "Maximum" } ],
+                    [ "...", "${StateManagerFunction}", { "stat": "Maximum" } ]
+                ],
+                "region": "${AWS::Region}",
+                "title": "Max Concurrent Executions",
+                "period": 300
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 18,
+            "width": 24,
+            "height": 6,
+            "properties": {
+                "view": "timeSeries",
+                "stacked": false,
+                "metrics": [
+                    [ "AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${StateTable}" ],
+                    [ ".", "ConsumedWriteCapacityUnits", ".", "." ],
+                    [ "...", "${CacheTable}" ],
+                    [ ".", "ConsumedReadCapacityUnits", ".", "." ]
+                ],
+                "region": "${AWS::Region}",
+                "title": "DynamoDB Capacity Units",
+                "period": 300
+            }
+        }
+    ]
+}

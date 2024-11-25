@@ -1,0 +1,119 @@
+{
+    "Parameters": {
+        "Environment": "prod",
+        "AlarmEmail": "prod-alerts@example.com",
+        "SlackWebhookUrl": "https://hooks.slack.com/services/PROD_CHANNEL",
+        "AlertWebhookUrl": "https://api.opsgenie.com/v2/alerts/prod",
+        "MetricsConfiguration": {
+            "SamplingRate": 1.0,
+            "DetailedMetricsEnabled": true,
+            "RetentionDays": 90,
+            "Thresholds": {
+                "APIErrorRate": 5,
+                "APILatency": 2000,
+                "CacheHitRate": 60,
+                "MemoryUtilization": 80,
+                "ConcurrentExecutions": 80,
+                "ColdStarts": 10,
+                "StateProcessingLag": 30
+            },
+            "Alarms": {
+                "APIErrors": {
+                    "EvaluationPeriods": 2,
+                    "Period": 300,
+                    "Threshold": 3,
+                    "Priority": "P1",
+                    "Escalation": {
+                        "FirstLevel": 5,
+                        "SecondLevel": 15,
+                        "FinalLevel": 30
+                    }
+                },
+                "APILatency": {
+                    "EvaluationPeriods": 2,
+                    "Period": 300,
+                    "Threshold": 2000,
+                    "Priority": "P2",
+                    "Escalation": {
+                        "FirstLevel": 10,
+                        "SecondLevel": 20
+                    }
+                },
+                "GitHubRateLimit": {
+                    "EvaluationPeriods": 1,
+                    "Period": 60,
+                    "Threshold": 500,
+                    "Priority": "P2"
+                },
+                "DynamoDBThrottling": {
+                    "EvaluationPeriods": 2,
+                    "Period": 300,
+                    "Threshold": 1,
+                    "Priority": "P1"
+                }
+            },
+            "CompositeAlarms": {
+                "SystemHealth": {
+                    "Priority": "P1",
+                    "RequiredAlarms": [
+                        "APIErrors",
+                        "GitHubScraperErrors",
+                        "LinkedInScraperErrors",
+                        "DynamoDBThrottling"
+                    ],
+                    "Escalation": {
+                        "FirstLevel": 5,
+                        "SecondLevel": 10,
+                        "FinalLevel": 15
+                    }
+                },
+                "Performance": {
+                    "Priority": "P2",
+                    "RequiredAlarms": [
+                        "APILatency",
+                        "CacheHitRate",
+                        "ConcurrentExecutions"
+                    ]
+                }
+            }
+        },
+        "Logging": {
+            "Level": "INFO",
+            "RetentionDays": 90,
+            "DetailedTracing": true,
+            "SensitiveDataMasking": true,
+            "AuditLogging": true
+        },
+        "Dashboard": {
+            "RefreshRate": 60,
+            "DefaultTimeRange": "1h",
+            "CustomWidgets": {
+                "SLACompliance": true,
+                "CostTracking": true,
+                "ErrorDistribution": true,
+                "PerformanceHeatmap": true
+            }
+        },
+        "Backup": {
+            "MetricsRetention": 365,
+            "LogsRetention": 180,
+            "CrossRegionReplication": true
+        },
+        "Security": {
+            "EncryptionEnabled": true,
+            "AuditEnabled": true,
+            "IPRestriction": [
+                "10.0.0.0/8",
+                "172.16.0.0/12"
+            ]
+        }
+    },
+    "Tags": {
+        "Environment": "prod",
+        "Project": "github-linkedin-analyzer",
+        "Owner": "platform-team",
+        "CostCenter": "production",
+        "Compliance": "SOC2",
+        "DataClassification": "confidential"
+    }
+}
